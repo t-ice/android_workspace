@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">MusicButtons</string>
+    <string name="NEXT_TRACK">Next Track</string>
+    <string name="PREVIOUS_TRACK">Previous Track</string>
+    <string name="PLAY_PAUSE">Play/Pause</string>
+</resources>
