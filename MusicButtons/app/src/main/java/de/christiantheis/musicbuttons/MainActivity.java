@@ -41,23 +41,16 @@ import static android.bluetooth.BluetoothAdapter.STATE_CONNECTED;
 public class MainActivity extends AppCompatActivity {
 
 
-    private final static int REQUEST_ENABLE_BT = 1;
-    public static final String TAG = "musicbuttons";
 
-    public static final UUID BLUE_CAN_CUSTOM_SERVICE_UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb");
-    public static final UUID BLUE_CAN_CUSTOM_CHARACTERISTIC_UUID = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb");
-    public static final UUID BLUE_CAN_CUSTOM_CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-    BluetoothDevice blueCan;
-    BluetoothAdapter bluetoothAdapter;
-    BluetoothAdapter.LeScanCallback scanCallback;
-    BluetoothGatt gatt;
-
-    MusicController musicController = new MusicController(this);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        checkLocationServiceGrants();
+    }
+
+    private void checkLocationServiceGrants() {
         int permissionCheck = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION);
         if (permissionCheck != PackageManager.PERMISSION_GRANTED) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
@@ -71,131 +64,53 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    /**
-     * Called when the user taps the Send button
-     */
     public void onNextTrackBottonClick(View view) {
-        musicController.next();
+        MusicController.getInstance(this).nextTrack();
     }
 
-    /**
-     * Called when the user taps the Send button
-     */
     public void onPreviousTrackBottonClick(View view) {
-        musicController.previousTrack();
+        MusicController.getInstance(this).previousTrack();
     }
 
-
-    /**
-     * Called when the user taps the Send button
-     */
     public void onPlayPauseBottonClick(View view) {
-        musicController.togglePause();
+        MusicController.getInstance(this).togglePause();
     }
 
 
-    /**
-     * Called when the user taps the Send button
-     */
     public void onStartDiscoverBottonClick(View view) {
+        BlueCanController blueCanController = BlueCanController.getInstance(this);
 
-        final BluetoothManager bluetoothManager =
-                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        bluetoothAdapter = bluetoothManager.getAdapter();
-
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
-            Intent enableBtIntent =
-                    new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+        if (!blueCanController.isBluetoothEnabled()) {
+            startEnableBluetoothActivity();
+        } else {
+            blueCanController.startDiscovery();
         }
+    }
 
-        scanCallback = new BluetoothAdapter.LeScanCallback() {
-            @Override
-            public void onLeScan(BluetoothDevice bluetoothDevice, int i, byte[] bytes) {
-
-                log(bluetoothDevice.getName() + " : " + bluetoothDevice.getAddress());
-
-                if ("3C:A3:08:92:EB:40".equals(bluetoothDevice.getAddress())) {
-                    blueCan = bluetoothDevice;
-                }
-            }
-        };
-        bluetoothAdapter.startLeScan(scanCallback);
+    private void startEnableBluetoothActivity() {
+        final int REQUEST_ENABLE_BT = 1;
+        Intent enableBtIntent =
+                new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+        startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
     }
 
 
     public void onStopDiscoverBottonClick(View view) {
-
-        if (bluetoothAdapter != null && scanCallback != null) {
-            bluetoothAdapter.stopLeScan(scanCallback);
-        }
-
+        BlueCanController.getInstance(this).stopDiscovery();
     }
+
 
     /**
      * Called when the user taps the Send button
      */
     public void onConnectBottonClick(View view) {
-
-        BluetoothGattCallback gattCallback =
-                new BluetoothGattCallback() {
-                    @Override
-                    public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-                        super.onConnectionStateChange(gatt, status, newState);
-                        if (newState == STATE_CONNECTED) {
-                            gatt.discoverServices();
-                        }
-                    }
-
-                    @Override
-                    public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-                        BluetoothGattCharacteristic characteristic =
-                                gatt.getService(BLUE_CAN_CUSTOM_SERVICE_UUID)
-                                        .getCharacteristic(BLUE_CAN_CUSTOM_CHARACTERISTIC_UUID);
-
-                        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(BLUE_CAN_CUSTOM_CLIENT_CHARACTERISTIC_CONFIG_UUID);
-                        descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                        gatt.setCharacteristicNotification(characteristic, true);
-                        gatt.writeDescriptor(descriptor);
-                    }
-
-
-                    @Override
-                    public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-                        final String value = new String(characteristic.getValue());
-                        log("ValueChanged: " + value);
-                        switch (value) {
-                            case "PLAY":
-
-                                break;
-                            case "NEXT":
-                                break;
-                            case "PREVIOUS":
-                                break;
-                            default:
-                                log("Value not understood: " + value);
-                                break;
-                        }
-                    }
-                };
-
-        gatt = blueCan.connectGatt(this, true, gattCallback);
-    }
-
-    private void sendMessageToBlueCan(String message) {
-        BluetoothGattCharacteristic characteristic =
-                gatt.getService(BLUE_CAN_CUSTOM_SERVICE_UUID)
-                        .getCharacteristic(BLUE_CAN_CUSTOM_CHARACTERISTIC_UUID);
-        characteristic.setValue(message.getBytes());
-        gatt.writeCharacteristic(characteristic);
+        BlueCanController.getInstance(this).connect();
     }
 
 
     public void log(String text) {
-        //TextView textElement = findViewById(R.id.editText);
-        //textElement.append(text);
         if (text != null && !text.isEmpty())
-            Log.d(TAG, text);
+            Log.d(Constants.LOG_TAG, text);
     }
 
 
