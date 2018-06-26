@@ -3,4 +3,8 @@
     <string name="NEXT_TRACK">Next Track</string>
     <string name="PREVIOUS_TRACK">Previous Track</string>
     <string name="PLAY_PAUSE">Play/Pause</string>
+    <string name="DISCOVER">Discover</string>
+    <string name="CONNECT">Connect</string>
+    <string name="START_DISCOVER">Start discover</string>
+    <string name="STOP_DISCOVER">Stop discover</string>
 </resources>
