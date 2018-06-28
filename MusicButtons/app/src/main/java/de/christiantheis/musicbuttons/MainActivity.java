@@ -11,6 +11,7 @@ import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.RemoteException;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -19,14 +20,40 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import org.altbeacon.beacon.BeaconConsumer;
+import org.altbeacon.beacon.BeaconManager;
+import org.altbeacon.beacon.BeaconParser;
+import org.altbeacon.beacon.Identifier;
+import org.altbeacon.beacon.MonitorNotifier;
+import org.altbeacon.beacon.Region;
+import org.altbeacon.beacon.startup.BootstrapNotifier;
+import org.altbeacon.beacon.startup.RegionBootstrap;
+
 public class MainActivity extends AppCompatActivity {
 
-    BlueCanService blueCanService;
+    private BlueCanService blueCanService;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        checkLocationServiceGrants();
+        bindBlueCanService();
+
+    }
+
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
 
         @Override
         public void onServiceConnected(ComponentName componentName, IBinder service) {
             blueCanService = ((BlueCanService.LocalBinder) service).getService();
+            blueCanService.initialize();
+            if (!blueCanService.isBluetoothEnabled()) {
+                startEnableBluetoothActivity();
+            } else {
+                blueCanService.connect();
+            }
         }
 
         @Override
@@ -40,20 +67,20 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             final String action = intent.getAction();
-            EditText text = (EditText) findViewById(R.id.editText);
+
             switch (action) {
                 case BlueCanService.ACTION_GATT_CONNECTED:
-                    text.append("Gatt connected\n");
+                    showText("Gatt connected");
                     break;
                 case BlueCanService.ACTION_GATT_DISCONNECTED:
-                    text.append("Gatt disconnected\n");
+                    showText("Gatt disconnected");
                     break;
                 case BlueCanService.ACTION_GATT_SERVICES_DISCOVERED:
-                    text.append("Services discovered\n");
+                    showText("Services discovered");
                     break;
                 case BlueCanService.ACTION_DATA_AVAILABLE:
                     String command = intent.getStringExtra(BlueCanService.EXTRA_DATA);
-                    text.append("Received data: " + command + "\n");
+                    showText("Received data: " + command);
                     handleCommand(command);
                     break;
                 default:
@@ -64,13 +91,15 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        checkLocationServiceGrants();
-        bindBlueCanService();
+    private void showText(String text) {
+        EditText editText = getEditText();
+        editText.append(text + "\n");
     }
+
+    private EditText getEditText() {
+        return findViewById(R.id.editText);
+    }
+
 
     private void bindBlueCanService() {
         Intent gattServiceIntent = new Intent(this, BlueCanService.class);
@@ -98,7 +127,6 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(mGattUpdateReceiver, makeGattUpdateIntentFilter());
         if (blueCanService != null) {
             blueCanService.connect();
-
         }
     }
 
@@ -111,11 +139,6 @@ public class MainActivity extends AppCompatActivity {
         return intentFilter;
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        unregisterReceiver(mGattUpdateReceiver);
-    }
 
     @Override
     protected void onDestroy() {
@@ -138,8 +161,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-
-
     private void startEnableBluetoothActivity() {
         final int REQUEST_ENABLE_BT = 1;
         Intent enableBtIntent =
@@ -148,24 +169,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-
-
-    /**
-     * Called when the user taps the Send button
-     */
     public void onConnectBottonClick(View view) {
-        blueCanService.initialize();
-        if (!blueCanService.isBluetoothEnabled()) {
-            startEnableBluetoothActivity();
-        } else {
-            blueCanService.connect();
-        }
+        blueCanService.connect();
+    }
+
+    public void onClearBottonClick(View view) {
+        getEditText().setText("");
     }
 
 
     public void log(String text) {
-        if (text != null && !text.isEmpty())
+        if (text != null && !text.isEmpty()) {
             Log.d(Constants.LOG_TAG, text);
+        }
+
     }
 
 
@@ -186,5 +203,8 @@ public class MainActivity extends AppCompatActivity {
                 break;
         }
     }
+
+
+
 
 }

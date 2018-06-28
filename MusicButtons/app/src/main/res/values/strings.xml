@@ -7,4 +7,5 @@
     <string name="CONNECT">Connect</string>
     <string name="START_DISCOVER">Start discover</string>
     <string name="STOP_DISCOVER">Stop discover</string>
+    <string name="CLEAR">Clear</string>
 </resources>

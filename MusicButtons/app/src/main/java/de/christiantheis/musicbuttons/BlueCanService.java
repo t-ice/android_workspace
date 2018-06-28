@@ -55,45 +55,50 @@ public class BlueCanService extends Service {
     private BluetoothGatt bluetoothGatt;
     private final IBinder mBinder = new LocalBinder();
 
-    private BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+    private BluetoothGattCallback gattCallback;
 
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                broadcastUpdate(ACTION_GATT_CONNECTED);
-                Log.i(Constants.LOG_TAG, "Connected to GATT server and attempting to start service discovery");
-                bluetoothGatt.discoverServices();
+    @NonNull
+    private BluetoothGattCallback createBluetoothGattCallback() {
+        return new BluetoothGattCallback() {
+            @Override
+            public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
 
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                Log.i(Constants.LOG_TAG, "Disconnected from GATT server.");
-                broadcastUpdate(ACTION_GATT_DISCONNECTED);
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    broadcastUpdate(ACTION_GATT_CONNECTED);
+                    Log.i(Constants.LOG_TAG, "Connected to GATT server and attempting to start service discovery");
+                    bluetoothGatt.discoverServices();
+
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    Log.i(Constants.LOG_TAG, "Disconnected from GATT server.");
+                    broadcastUpdate(ACTION_GATT_DISCONNECTED);
+                }
             }
-        }
 
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED);
-            Log.i(Constants.LOG_TAG, "Connected to GATT server and attempting to start service discovery");
-            BluetoothGattCharacteristic characteristic =
-                    gatt.getService(BLUE_CAN_CUSTOM_SERVICE_UUID)
-                            .getCharacteristic(BLUE_CAN_CUSTOM_CHARACTERISTIC_UUID);
+            @Override
+            public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+                broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED);
+                Log.i(Constants.LOG_TAG, "Connected to GATT server and attempting to start service discovery");
+                BluetoothGattCharacteristic characteristic =
+                        gatt.getService(BLUE_CAN_CUSTOM_SERVICE_UUID)
+                                .getCharacteristic(BLUE_CAN_CUSTOM_CHARACTERISTIC_UUID);
 
-            BluetoothGattDescriptor descriptor = characteristic.getDescriptor(BLUE_CAN_CUSTOM_CLIENT_CHARACTERISTIC_CONFIG_UUID);
-            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-            gatt.setCharacteristicNotification(characteristic, true);
-            gatt.writeDescriptor(descriptor);
-        }
+                BluetoothGattDescriptor descriptor = characteristic.getDescriptor(BLUE_CAN_CUSTOM_CLIENT_CHARACTERISTIC_CONFIG_UUID);
+                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                gatt.setCharacteristicNotification(characteristic, true);
+                gatt.writeDescriptor(descriptor);
+            }
 
 
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            final String commandValue = new String(characteristic.getValue());
-            log("ValueChanged: " + commandValue);
-            final Intent intent = new Intent(ACTION_DATA_AVAILABLE);
-            intent.putExtra(EXTRA_DATA, commandValue);
-            sendBroadcast(intent);
-        }
-    };
+            @Override
+            public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+                final String commandValue = new String(characteristic.getValue());
+                log("ValueChanged: " + commandValue);
+                final Intent intent = new Intent(ACTION_DATA_AVAILABLE);
+                intent.putExtra(EXTRA_DATA, commandValue);
+                sendBroadcast(intent);
+            }
+        };
+    }
 
     public void initialize() {
         final BluetoothManager bluetoothManager =
@@ -125,8 +130,10 @@ public class BlueCanService extends Service {
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
-                log("Device not discovered in scan period!");
-                stopDiscovery();
+                if(blueCan == null){
+                    log("Device not discovered in scan period!");
+                    stopDiscovery();
+                }
             }
         };
         mHandler.postDelayed(runnable, SCAN_PERIOD);
@@ -174,8 +181,8 @@ public class BlueCanService extends Service {
         if(blueCan == null){
             startDiscovery();
         } else{
-            if (gattCallback == null || bluetoothGatt == null) {
-                bluetoothGatt = blueCan.connectGatt(this, true, gattCallback);
+            if (bluetoothGatt == null) {
+                bluetoothGatt = blueCan.connectGatt(this, false, createBluetoothGattCallback());
             }else{
                 //reconnect
                 bluetoothGatt.connect();
@@ -224,10 +231,10 @@ public class BlueCanService extends Service {
 
 
     public void close() {
-        if (bluetoothGatt == null) {
-            return;
+        if (bluetoothGatt != null) {
+            bluetoothGatt.close();
         }
-        bluetoothGatt.close();
         bluetoothGatt = null;
+        gattCallback = null;
     }
 }
