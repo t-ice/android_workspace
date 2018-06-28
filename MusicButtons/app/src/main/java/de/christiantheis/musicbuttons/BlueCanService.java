@@ -9,21 +9,13 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.BluetoothLeScanner;
-import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
-import android.os.Handler;
 import android.os.IBinder;
 import android.support.annotation.NonNull;
 import android.util.Log;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 public class BlueCanService extends Service {
@@ -45,17 +37,19 @@ public class BlueCanService extends Service {
     public final static String EXTRA_DATA =
             "de.bluecan.EXTRA_DATA";
 
-    // Stops scanning after 5 seconds.
-    private static final long SCAN_PERIOD = 5000;
-    private Handler mHandler = new Handler();
     private BluetoothDevice blueCan;
     private BluetoothAdapter bluetoothAdapter;
-    private BluetoothLeScanner leScanner;
-    private ScanCallback scanCallback;
     private BluetoothGatt bluetoothGatt;
-    private final IBinder mBinder = new LocalBinder();
-
+    private final IBinder localBinder = new LocalBinder();
     private BluetoothGattCallback gattCallback;
+
+
+    public void initialize() {
+        final BluetoothManager bluetoothManager =
+                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        bluetoothAdapter = bluetoothManager.getAdapter();
+        blueCan = bluetoothAdapter.getRemoteDevice(BLUECAN_ADDRESS);
+    }
 
     @NonNull
     private BluetoothGattCallback createBluetoothGattCallback() {
@@ -77,7 +71,7 @@ public class BlueCanService extends Service {
             @Override
             public void onServicesDiscovered(BluetoothGatt gatt, int status) {
                 broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED);
-                Log.i(Constants.LOG_TAG, "Connected to GATT server and attempting to start service discovery");
+                Log.i(Constants.LOG_TAG, "Service discovered");
                 BluetoothGattCharacteristic characteristic =
                         gatt.getService(BLUE_CAN_CUSTOM_SERVICE_UUID)
                                 .getCharacteristic(BLUE_CAN_CUSTOM_CHARACTERISTIC_UUID);
@@ -100,93 +94,17 @@ public class BlueCanService extends Service {
         };
     }
 
-    public void initialize() {
-        final BluetoothManager bluetoothManager =
-                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        bluetoothAdapter = bluetoothManager.getAdapter();
-        leScanner = bluetoothAdapter.getBluetoothLeScanner();
-    }
 
-    private void startDiscovery() {
-        if (bluetoothGatt == null) {
-            postDelayStopDiscovery();
-            scanCallback = createScanCallback();
-            leScanner.startScan(getScanFilters(), getScanSettings(), scanCallback);
-        }
-    }
-
-
-
-    private void stopDiscovery() {
-        if (bluetoothAdapter != null && scanCallback != null) {
-            leScanner.stopScan(scanCallback);
-        }
-    }
-
-    /**
-     * Stops scanning after a pre-defined scan period.
-     */
-    private void postDelayStopDiscovery() {
-        Runnable runnable = new Runnable() {
-            @Override
-            public void run() {
-                if(blueCan == null){
-                    log("Device not discovered in scan period!");
-                    stopDiscovery();
-                }
-            }
-        };
-        mHandler.postDelayed(runnable, SCAN_PERIOD);
-    }
-
-    @NonNull
-    private ScanCallback createScanCallback() {
-        return new ScanCallback() {
-            @Override
-            public void onScanResult(int callbackType, ScanResult result) {
-                blueCan = result.getDevice();
-                log(blueCan.getName() + " : " + blueCan.getAddress());
-                stopDiscovery();
-                connect();
-            }
-
-            @Override
-            public void onScanFailed(int errorCode) {
-                log("Scan failed!");
-            }
-        };
-    }
-
-    @NonNull
-    private List<ScanFilter> getScanFilters() {
-        ScanFilter filter = new ScanFilter.Builder().setDeviceAddress(BLUECAN_ADDRESS).build();
-        List<ScanFilter> filters = new ArrayList<>();
-        filters.add(filter);
-        return filters;
-    }
-
-    private ScanSettings getScanSettings() {
-        return new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
-                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                .build();
-    }
-
-    public boolean isBluetoothEnabled() {
+    boolean isBluetoothEnabled() {
         return bluetoothAdapter != null && bluetoothAdapter.isEnabled();
     }
 
-
     public void connect() {
-        if(blueCan == null){
-            startDiscovery();
-        } else{
-            if (bluetoothGatt == null) {
-                bluetoothGatt = blueCan.connectGatt(this, false, createBluetoothGattCallback());
-            }else{
-                //reconnect
-                bluetoothGatt.connect();
-            }
+        if (bluetoothGatt == null) {
+            bluetoothGatt = blueCan.connectGatt(this, false, createBluetoothGattCallback());
+        } else {
+            //reconnect
+            bluetoothGatt.connect();
         }
     }
 
@@ -199,16 +117,6 @@ public class BlueCanService extends Service {
     }
 
 
-    public void log(String text) {
-        if (text != null && !text.isEmpty())
-            Log.d(Constants.LOG_TAG, text);
-    }
-
-    private void broadcastUpdate(final String action) {
-        final Intent intent = new Intent(action);
-        sendBroadcast(intent);
-    }
-
     public class LocalBinder extends Binder {
         BlueCanService getService() {
             return BlueCanService.this;
@@ -217,14 +125,11 @@ public class BlueCanService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        return mBinder;
+        return localBinder;
     }
 
     @Override
     public boolean onUnbind(Intent intent) {
-        // After using a given device, you should make sure that BluetoothGatt.close() is called
-        // such that resources are cleaned up properly.  In this particular example, close() is
-        // invoked when the UI is disconnected from the Service.
         close();
         return super.onUnbind(intent);
     }
@@ -235,6 +140,17 @@ public class BlueCanService extends Service {
             bluetoothGatt.close();
         }
         bluetoothGatt = null;
-        gattCallback = null;
+        log("Close gatt");
+    }
+
+
+    public void log(String text) {
+        if (text != null && !text.isEmpty())
+            Log.d(Constants.LOG_TAG, text);
+    }
+
+    private void broadcastUpdate(final String action) {
+        final Intent intent = new Intent(action);
+        sendBroadcast(intent);
     }
 }

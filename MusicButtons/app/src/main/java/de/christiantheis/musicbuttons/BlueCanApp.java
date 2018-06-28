@@ -12,7 +12,7 @@ import org.altbeacon.beacon.startup.BootstrapNotifier;
 import org.altbeacon.beacon.startup.RegionBootstrap;
 
 /**
- * Sorgt dafuer, dass beim Erkennen eines IBeacon vom HM 10 Modul die MainActivity gestart wird.
+ * Sorgt dafuer, dass beim Erkennen eines IBeacon vom HM 10 Modul des BlueCan-Geraets die MainActivity gestartet wird.
  */
 public class BlueCanApp extends Application implements BootstrapNotifier {
     public static final String I_BEACON_LAYOUT = "m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24";
